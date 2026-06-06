@@ -7,20 +7,23 @@ on:
 
 jobs:
   news-agent:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@v4
+
       - name: 🐍 Python সেটআপ
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
+
       - name: 📦 Dependencies ইন্সটল
         run: |
           pip install -r scraper/requirements.txt
           playwright install chromium --with-deps
+
       - name: 🤖 এজেন্ট চালাও
         env:
           WP_URL:          ${{ secrets.WP_URL }}
