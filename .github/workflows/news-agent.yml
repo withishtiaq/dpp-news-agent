@@ -11,7 +11,7 @@ permissions:
 jobs:
   news-agent:
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@v4
@@ -25,11 +25,9 @@ jobs:
           cache: 'pip'
 
       - name: 📦 Dependencies ইন্সটল
-        run: |
-          pip install -r scraper/requirements.txt
-          playwright install chromium --with-deps
+        run: pip install -r scraper/requirements.txt
 
-      - name: 🤖 নিউজ স্ক্র্যাপ করো
+      - name: 🤖 RSS থেকে নিউজ সংগ্রহ করো
         run: python scraper/main.py
 
       - name: 📤 GitHub-এ আপলোড করো
