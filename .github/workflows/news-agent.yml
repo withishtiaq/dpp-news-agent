@@ -36,6 +36,7 @@ jobs:
         run: |
           git config user.email "dpp-agent@github.com"
           git config user.name "DPP Agent"
+          git pull origin main --rebase
           git add data/articles.json
           git diff --staged --quiet || git commit -m "📰 $(TZ='Asia/Dhaka' date +'%Y-%m-%d %H:%M')"
           git push
