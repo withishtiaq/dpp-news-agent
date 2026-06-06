@@ -26,7 +26,7 @@ def get_layout() -> str:
 SOURCES = [
     {'id': 'prothomalo',        'name': 'প্রথম আলো',        'upazila': '',
      'url': 'https://www.prothomalo.com/search?type=text%2Cteam-bio%2Clisticle%2Cphoto%2Cgallery%2Cvideo%2Clive-blog%2Cinterview&q=%E0%A6%B0%E0%A6%BE%E0%A6%9C%E0%A6%B6%E0%A6%BE%E0%A6%B9%E0%A7%80',
-     'extra_skip': ['/photo/', '/video/', '/gallery/', '/international/']},
+     'extra_skip': ['/photo/', '/video/', '/gallery/', '/international/', '/lifestyle/', '/entertainment/', '/sports/', '/feature/', '/opinion/', '/world/', '/technology/', '/science/']},
 
     {'id': 'jugantor_bagha',    'name': 'যুগান্তর — বাঘা',    'upazila': 'বাঘা',
      'url': 'https://www.jugantor.com/location/rajshahi-rajshahi-bagha',    'extra_skip': ['/location/']},
@@ -48,7 +48,7 @@ SOURCES = [
      'url': 'https://www.jugantor.com/location/rajshahi-rajshahi-tanore',   'extra_skip': ['/location/']},
 
     {'id': 'jagonews24',     'name': 'জাগো নিউজ ২৪',   'upazila': '',
-     'url': 'https://www.jagonews24.com/bangladesh/rajshahi/rajshahi',    'extra_skip': []},
+     'url': 'https://www.jagonews24.com/bangladesh/rajshahi/rajshahi',    'extra_skip': ['/bangladesh/rajshahi/rajshahi']},
     {'id': 'ajkerpatrika',   'name': 'আজকের পত্রিকা',  'upazila': '',
      'url': 'https://www.ajkerpatrika.com/country/rajshahi-division',     'extra_skip': ['/country/', '/division']},
     {'id': 'padmatimes24',   'name': 'পদ্মা টাইমস ২৪', 'upazila': '',
@@ -144,6 +144,25 @@ async def get_latest_article_url(page, source: dict) -> str | None:
     except Exception:
         pass
 
+    # Strategy 1.5: Jugantor-specific — সরাসরি article section URL খোঁজো
+    if 'jugantor' in source.get('id', ''):
+        jugantor_sections = ['/politics/', '/tp-city/', '/national-others/', '/district/',
+                             '/crime/', '/court/', '/country/', '/economy/', '/campus/',
+                             '/agriculture/', '/health/', '/science/', '/sports/']
+        for link in all_links:
+            if not link or not link.startswith('http'): continue
+            if 'jugantor.com' not in link: continue
+            if link.rstrip('/') == list_url.rstrip('/'): continue
+            if '/location/' in link: continue
+            path  = urlparse(link).path
+            parts = [p for p in path.rstrip('/').split('/') if p]
+            if len(parts) < 2: continue
+            # Section + Numeric ID pattern
+            last = parts[-1]
+            if re.search(r'\d{4,}', last) and any(s in link for s in jugantor_sections):
+                print(f"    📌 Strategy 1.5 (Jugantor article)")
+                return link
+
     # Strategy 2: Numeric ID (jugantor style: /section/123456)
     for link in all_links:
         if not is_valid(link): continue
@@ -236,6 +255,13 @@ async def process_source(browser, source: dict, layout: str):
 
         if not article.get('title') or not article.get('content'):
             print(f"    ⚠️ শিরোনাম বা কন্টেন্ট পাওয়া যায়নি"); return
+
+        # Prothom Alo-র জন্য: রাজশাহী সংক্রান্ত কিনা check করো
+        if source['id'] == 'prothomalo':
+            rajshahi_check = 'রাজশাহী' in article['title'] or 'rajshahi' in article['url'].lower() or 'রাজশাহী' in article['content'][:500]
+            if not rajshahi_check:
+                print(f"    ⚠️ রাজশাহী সংক্রান্ত নয় — skip: {article['title'][:50]}")
+                return
 
         print(f"    📝 {article['title'][:65]}")
         print(f"    📊 {len(article['content'])} অক্ষর | 🖼️ {'✓' if article['image_url'] else '✗'}")
