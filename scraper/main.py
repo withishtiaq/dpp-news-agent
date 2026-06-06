@@ -117,11 +117,20 @@ async def get_latest_article_url(page, source: dict) -> str | None:
         if skip and any(s in link.lower() for s in skip): return False
         return True
 
+    # jagonews24-র জন্য article load হওয়ার জন্য অপেক্ষা করো
+    if source.get('id') == 'jagonews24':
+        try:
+            await page.wait_for_selector('h2 a, h3 a, .news-title a, article a', timeout=10000)
+        except Exception:
+            pass
+        await asyncio.sleep(3)
+
     try:
         all_links = await page.eval_on_selector_all(
             'a[href]',
             "els => [...new Set(els.map(e => e.href).filter(Boolean))]"
         )
+        print(f"    📊 মোট link: {len(all_links)}")
     except Exception:
         return None
 
@@ -262,12 +271,16 @@ async def process_source(browser, source: dict, layout: str):
         if not article.get('title') or not article.get('content'):
             print(f"    ⚠️ শিরোনাম বা কন্টেন্ট পাওয়া যায়নি"); return
 
-        # আজকের পত্রিকা: রাজশাহী সংক্রান্ত কিনা চেক করো
-        if source['id'] == 'ajkerpatrika':
-            combined = article['title'] + article['content'][:300]
-            if 'রাজশাহী' not in combined:
-                print(f"    ⚠️ রাজশাহী সংক্রান্ত নয় — skip: {article['title'][:50]}")
-                return
+        # সব সোর্সের জন্য: রাজশাহী check
+        title_has  = 'রাজশাহী' in article['title']
+        content_has = 'রাজশাহী' in article['content']
+        if title_has:
+            print(f"    ✔️ শিরোনামে রাজশাহী পাওয়া গেছে")
+        elif content_has:
+            print(f"    ✔️ বিস্তারিতে রাজশাহী পাওয়া গেছে")
+        else:
+            print(f"    ⚠️ রাজশাহী সংক্রান্ত নয় — skip: {article['title'][:50]}")
+            return
 
         print(f"    📝 {article['title'][:65]}")
         print(f"    📊 {len(article['content'])} অক্ষর | 🖼️ {'✓' if article['image_url'] else '✗'}")
