@@ -79,8 +79,25 @@ def fetch_rss(session, url: str):
     return None
 
 def parse_rss(content: bytes) -> list:
+    # BOM এবং leading content পরিষ্কার করো
+    text = content.decode('utf-8', errors='replace')
+    text = text.lstrip('\ufeff')  # UTF-8 BOM সরাও
+
+    # XML শুরু খোঁজো
+    for tag in ['<?xml', '<rss', '<feed']:
+        idx = text.find(tag)
+        if idx > 0:
+            print(f"  ℹ️ {idx} bytes skipped before XML start")
+            text = text[idx:]
+            break
+        elif idx == 0:
+            break
+
+    # Debug: প্রথম ২০০ অক্ষর দেখাও
+    print(f"  📜 XML preview: {text[:150].strip()}")
+
     try:
-        root = ET.fromstring(content)
+        root = ET.fromstring(text.encode('utf-8'))
     except ET.ParseError as e:
         print(f"  ❌ XML parse error: {e}")
         return []
