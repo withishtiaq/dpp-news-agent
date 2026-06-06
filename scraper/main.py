@@ -87,21 +87,22 @@ async def get_article_urls(page) -> list:
         seen.add(link)
         if 'padmatimes24.com' not in link:
             continue
+        # Exact category page skip
         if link.rstrip('/') == SOURCE_URL.rstrip('/'):
             continue
         path  = urlparse(link).path.rstrip('/')
         parts = [p for p in path.split('/') if p]
+        # কমপক্ষে ২ অংশ থাকতে হবে
         if len(parts) < 2:
             continue
-        # Skip category/tag/author pages
-        for bad in ['/category/', '/tag/', '/author/', '/page/', '/rajshahi/$']:
-            if bad.rstrip('$') in link.lower():
-                break
-        else:
-            # Article URL — numeric ID বা long slug
-            last = parts[-1]
-            if re.search(r'\d{3,}', last) or len(last) >= 15:
-                article_urls.append(link)
+        # Pagination, tag, author skip
+        skip_these = ['/page/', '/tag/', '/author/', '/wp-admin/', '/feed/']
+        if any(s in link.lower() for s in skip_these):
+            continue
+        # Article — শেষ অংশ slug হতে হবে (শুধু / বা # নয়)
+        last = parts[-1]
+        if len(last) >= 5:  # valid slug
+            article_urls.append(link)
 
     print(f"  📊 {len(article_urls)} টি article URL পাওয়া গেছে")
     return article_urls[:15]  # সর্বোচ্চ ১৫টা process করবো
