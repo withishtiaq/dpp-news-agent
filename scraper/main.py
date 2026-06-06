@@ -54,9 +54,10 @@ def strip_html(html: str) -> str:
 def make_session():
     if HAS_CLOUDSCRAPER:
         print("  🛡️ Cloudscraper (Cloudflare bypass) ব্যবহার করছি")
-        return cloudscraper.create_scraper(
+        s = cloudscraper.create_scraper(
             browser={'browser': 'chrome', 'platform': 'windows', 'mobile': False}
         )
+        return s
     else:
         print("  ⚠️ Requests ব্যবহার করছি")
         import requests
@@ -69,7 +70,7 @@ def make_session():
 
 def fetch_rss(session, url: str):
     try:
-        r = session.get(url, timeout=30, verify=False)
+        r = session.get(url, timeout=30)
         print(f"  [{r.status_code}] {url}")
         if r.status_code == 200:
             return r.content
