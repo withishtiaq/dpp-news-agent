@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-DPP নিউজ এজেন্ট — Final (Simple)
-পদ্মা টাইমস ২৪ থেকে রাজশাহীর সব নতুন নিউজ সংগ্রহ করে।
+DPP নিউজ এজেন্ট — Final (Debug version)
 """
 
 import asyncio
@@ -23,7 +22,6 @@ def get_layout() -> str:
 CONTENT_SELECTORS = [
     'div.entry-content p',
     'div[class*="post-content"] p',
-    'div[class*="single-post"] p',
     'div[class*="article-content"] p',
     'div[class*="news_content"] p',
     'article p',
@@ -31,10 +29,7 @@ CONTENT_SELECTORS = [
     'p',
 ]
 
-UPAZILA_LIST = [
-    'পবা', 'মোহনপুর', 'চারঘাট', 'পুঠিয়া',
-    'দুর্গাপুর', 'বাগমারা', 'গোদাগাড়ী', 'তানোর', 'বাঘা',
-]
+UPAZILA_LIST = ['পবা','মোহনপুর','চারঘাট','পুঠিয়া','দুর্গাপুর','বাগমারা','গোদাগাড়ী','তানোর','বাঘা']
 
 def detect_upazila(text: str) -> str:
     for u in UPAZILA_LIST:
@@ -42,87 +37,80 @@ def detect_upazila(text: str) -> str:
             return u
     return 'রাজশাহী শহর'
 
-async def dismiss_popups(page):
-    for sel in [
-        'button[class*="close"]', '[class*="popup"] button',
-        '[class*="overlay"] button', '[id*="close"]',
-    ]:
-        try:
-            btn = page.locator(sel).first
-            if await btn.is_visible(timeout=500):
-                await btn.click(timeout=500)
-                await asyncio.sleep(0.3)
-        except Exception:
-            pass
-
 async def get_article_urls(page) -> list:
-    """Listing page থেকে সব article URL বের করো"""
-    print(f"\n🔗 Listing page লোড করছি: {SOURCE_URL}")
+    print(f"\n🔗 Listing page: {SOURCE_URL}")
+
     try:
-        await page.goto(SOURCE_URL, timeout=45000, wait_until='domcontentloaded')
-        try:
-            await page.wait_for_load_state('networkidle', timeout=8000)
-        except Exception:
-            pass
-        await asyncio.sleep(3)
-        await dismiss_popups(page)
+        response = await page.goto(SOURCE_URL, timeout=45000, wait_until='domcontentloaded')
+        print(f"  📡 HTTP status: {response.status if response else 'N/A'}")
     except Exception as e:
-        print(f"  ❌ Listing page error: {e}")
+        print(f"  ❌ Goto error: {e}")
         return []
 
-    # সব article link বের করো
+    await asyncio.sleep(5)
+
+    # Page info
+    print(f"  📍 Final URL: {page.url}")
+    try:
+        title = await page.title()
+        print(f"  📄 Title: {title}")
+    except Exception:
+        pass
+
+    # Screenshot সেভ করো — Playwright কী দেখছে তা বোঝার জন্য
+    os.makedirs('data', exist_ok=True)
+    try:
+        await page.screenshot(path='data/debug.png', full_page=False)
+        print(f"  📸 Screenshot → data/debug.png")
+    except Exception as e:
+        print(f"  ⚠️ Screenshot error: {e}")
+
+    # Page HTML (প্রথম ৫০০ অক্ষর)
+    try:
+        html = await page.content()
+        print(f"  📜 HTML length: {len(html)}")
+        print(f"  📜 HTML preview: {html[:300].strip()}")
+    except Exception:
+        pass
+
+    # সব link
     try:
         all_links = await page.eval_on_selector_all(
             'a[href]',
             "els => [...new Set(els.map(e => e.href).filter(Boolean))]"
         )
-    except Exception:
+        print(f"  🔗 Total a[href]: {len(all_links)}")
+        for l in all_links[:5]:
+            print(f"      → {l}")
+    except Exception as e:
+        print(f"  ❌ Link extract error: {e}")
+        all_links = []
+
+    if not all_links:
         return []
 
+    # Article URLs filter করো
     article_urls = []
-    seen = set()
     for link in all_links:
-        if not link or link in seen:
-            continue
-        seen.add(link)
-        if 'padmatimes24.com' not in link:
-            continue
-        # Exact category page skip
-        if link.rstrip('/') == SOURCE_URL.rstrip('/'):
-            continue
+        if 'padmatimes24.com' not in link: continue
+        if link.rstrip('/') == SOURCE_URL.rstrip('/'): continue
         path  = urlparse(link).path.rstrip('/')
         parts = [p for p in path.split('/') if p]
-        # কমপক্ষে ২ অংশ থাকতে হবে
-        if len(parts) < 2:
-            continue
-        # Pagination, tag, author skip
-        skip_these = ['/page/', '/tag/', '/author/', '/wp-admin/', '/feed/']
-        if any(s in link.lower() for s in skip_these):
-            continue
-        # Article — শেষ অংশ slug হতে হবে (শুধু / বা # নয়)
-        last = parts[-1]
-        if len(last) >= 5:  # valid slug
+        if len(parts) < 2: continue
+        if any(s in link for s in ['/page/', '/tag/', '/author/', '/wp-admin/', '/feed/']): continue
+        if len(parts[-1]) >= 5:
             article_urls.append(link)
 
-    print(f"  📊 {len(article_urls)} টি article URL পাওয়া গেছে")
-    return article_urls[:15]  # সর্বোচ্চ ১৫টা process করবো
+    print(f"  📊 Article URLs found: {len(article_urls)}")
+    return article_urls[:10]
 
 async def scrape_article(page, url: str) -> dict | None:
-    """একটা article page থেকে title, content, image বের করো"""
     try:
         await page.goto(url, timeout=45000, wait_until='domcontentloaded')
-        try:
-            await page.wait_for_load_state('networkidle', timeout=6000)
-        except Exception:
-            pass
         await asyncio.sleep(3)
-        await dismiss_popups(page)
-    except PWTimeout:
-        return None
     except Exception:
         return None
 
-    # শিরোনাম
     title = ''
     for sel in ['meta[property="og:title"]', 'meta[name="twitter:title"]']:
         try:
@@ -132,12 +120,9 @@ async def scrape_article(page, url: str) -> dict | None:
         except Exception:
             pass
     if not title:
-        try:
-            title = (await page.inner_text('h1', timeout=3000)).strip()
-        except Exception:
-            pass
+        try: title = (await page.inner_text('h1', timeout=3000)).strip()
+        except Exception: pass
 
-    # ফিচার ইমেজ
     image_url = ''
     for sel in ['meta[property="og:image"]', 'meta[name="twitter:image"]']:
         try:
@@ -147,23 +132,18 @@ async def scrape_article(page, url: str) -> dict | None:
         except Exception:
             pass
 
-    # বিস্তারিত content
     content = ''
     for sel in CONTENT_SELECTORS:
         try:
             paras = await page.eval_on_selector_all(
-                sel,
-                "els => els.map(e => e.innerText.trim()).filter(t => t.length > 20)"
+                sel, "els => els.map(e => e.innerText.trim()).filter(t => t.length > 20)"
             )
             if paras:
-                bn_paras = [
-                    p for p in paras
-                    if len([c for c in p if '\u0980' <= c <= '\u09FF']) >= 8
-                ]
-                if bn_paras:
-                    joined = '\n\n'.join(bn_paras)
-                    if len(joined) >= 80:
-                        content = joined[:6000]; break
+                bn = [p for p in paras if len([c for c in p if '\u0980'<=c<='\u09FF'])>=8]
+                if bn:
+                    j = '\n\n'.join(bn)
+                    if len(j) >= 80:
+                        content = j[:6000]; break
         except Exception:
             continue
 
@@ -175,7 +155,7 @@ async def scrape_article(page, url: str) -> dict | None:
         'content':    content,
         'image_url':  image_url,
         'source_url': url,
-        'upazila':    detect_upazila(title + ' ' + content),
+        'upazila':    detect_upazila(title+' '+content),
     }
 
 async def main():
@@ -184,8 +164,7 @@ async def main():
 
     print(f"{'='*55}")
     print(f"🤖 DPP নিউজ এজেন্ট — {bd_time} (BD)")
-    print(f"🗞️  লেআউট: {layout}")
-    print(f"📰 সোর্স: পদ্মা টাইমস ২৪")
+    print(f"🗞️  লেআউট: {layout} | সোর্স: পদ্মা টাইমস ২৪")
     print(f"{'='*55}")
 
     articles = []
@@ -193,71 +172,60 @@ async def main():
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=True,
-            args=[
-                '--no-sandbox', '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage', '--disable-gpu',
-                '--disable-blink-features=AutomationControlled',
-            ],
+            args=['--no-sandbox','--disable-setuid-sandbox',
+                  '--disable-dev-shm-usage','--disable-gpu',
+                  '--disable-blink-features=AutomationControlled'],
         )
 
-        # ── Step 1: Listing page থেকে URLs বের করো ──────────
         context = await browser.new_context(
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
             locale='bn-BD',
             viewport={'width': 1366, 'height': 768},
-            extra_http_headers={'Accept-Language': 'bn-BD,bn;q=0.9,en-US;q=0.8'},
+            extra_http_headers={
+                'Accept-Language': 'bn-BD,bn;q=0.9,en-US;q=0.8',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            },
         )
         await context.add_init_script(
-            "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+            "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})"
         )
         page = await context.new_page()
         article_urls = await get_article_urls(page)
         await context.close()
 
-        # ── Step 2: প্রতিটা article scrape করো ──────────────
         for i, url in enumerate(article_urls, 1):
             print(f"\n[{i}/{len(article_urls)}] {url}")
-
-            context2 = await browser.new_context(
+            ctx2 = await browser.new_context(
                 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                locale='bn-BD',
-                viewport={'width': 1366, 'height': 768},
+                locale='bn-BD', viewport={'width':1366,'height':768},
             )
-            await context2.add_init_script(
-                "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+            await ctx2.add_init_script(
+                "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})"
             )
-            page2 = await context2.new_page()
-
+            p2 = await ctx2.new_page()
             try:
-                article = await scrape_article(page2, url)
-                if article:
-                    print(f"  📝 {article['title'][:60]}")
-                    print(f"  📊 {len(article['content'])} অক্ষর | 🖼️ {'✓' if article['image_url'] else '✗'} | 📍 {article['upazila']}")
-                    articles.append(article)
+                art = await scrape_article(p2, url)
+                if art:
+                    print(f"  📝 {art['title'][:60]}")
+                    print(f"  📊 {len(art['content'])}c | 🖼️{'✓'if art['image_url']else'✗'} | 📍{art['upazila']}")
+                    articles.append(art)
                 else:
                     print(f"  ⚠️ Content পাওয়া যায়নি")
             except Exception as e:
-                print(f"  ❌ Error: {e}")
+                print(f"  ❌ {e}")
             finally:
-                await context2.close()
-
+                await ctx2.close()
             await asyncio.sleep(2)
 
         await browser.close()
 
-    # ── Step 3: data/articles.json-এ সেভ করো ────────────────
     os.makedirs('data', exist_ok=True)
-    output = {
-        'generated_at': datetime.now(BD_TZ).isoformat(),
-        'layout':       layout,
-        'articles':     articles,
-    }
-    with open('data/articles.json', 'w', encoding='utf-8') as f:
-        json.dump(output, f, ensure_ascii=False, indent=2)
+    with open('data/articles.json','w',encoding='utf-8') as f:
+        json.dump({'generated_at':datetime.now(BD_TZ).isoformat(),'layout':layout,'articles':articles},f,ensure_ascii=False,indent=2)
 
     print(f"\n{'='*55}")
     print(f"💾 {len(articles)} আর্টিকেল → data/articles.json")
-    print(f"✅ শেষ। WordPress GitHub থেকে পড়ে post করবে।")
+    print(f"✅ শেষ।")
     print(f"{'='*55}")
 
 if __name__ == '__main__':
