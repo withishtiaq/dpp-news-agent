@@ -50,7 +50,7 @@ SOURCES = [
     {'id': 'jagonews24',     'name': 'জাগো নিউজ ২৪',   'upazila': '',
      'url': 'https://www.jagonews24.com/bangladesh/rajshahi/rajshahi',    'extra_skip': ['/bangladesh/rajshahi/rajshahi']},
     {'id': 'ajkerpatrika',   'name': 'আজকের পত্রিকা',  'upazila': '',
-     'url': 'https://www.ajkerpatrika.com/country/rajshahi-division',     'extra_skip': ['/country/', '/division']},
+     'url': 'https://www.ajkerpatrika.com/country/rajshahi-division',     'extra_skip': ['/country/', '/division', '/international/', '/world/']},
     {'id': 'padmatimes24',   'name': 'পদ্মা টাইমস ২৪', 'upazila': '',
      'url': 'https://padmatimes24.com/rajshahi/',                         'extra_skip': ['/category/']},
     {'id': 'uttaraprotidin', 'name': 'উত্তরা প্রতিদিন','upazila': '',
@@ -58,7 +58,14 @@ SOURCES = [
 ]
 
 CONTENT_SELECTORS = [
-    'div.col-xl-8 .details p', 'div[class*="news_dtl_body"] p',
+    # Jugantor specific
+    'div.col-xl-8 div.details p',
+    'div.col-xl-8 p',
+    'div[class*="news_dtl_body"] p',
+    'div[class*="news_dtl"] p',
+    'div[class*="dtls_body"] p',
+    'div[class*="dtl_body"] p',
+    '.details p',
     'div[class*="news_dtl"] p', 'div.details p',
     'div[class*="story-element-text"] p', 'div[class*="story-content"] p',
     'div[class*="news-details"] p', 'div[class*="details_body"] p',
@@ -181,14 +188,14 @@ async def get_latest_article_url(page, source: dict) -> str | None:
 
     return None
 
-async def scrape_article(page, url: str) -> dict:
+async def scrape_article(page, url: str, extra_wait: int = 3) -> dict:
     try:
         await page.goto(url, timeout=45000, wait_until='domcontentloaded')
         try:
-            await page.wait_for_load_state('networkidle', timeout=6000)
+            await page.wait_for_load_state('networkidle', timeout=8000)
         except Exception:
             pass
-        await asyncio.sleep(3)
+        await asyncio.sleep(extra_wait)
         await dismiss_popups(page)
     except PWTimeout:
         return {}
@@ -251,7 +258,8 @@ async def process_source(browser, source: dict, layout: str):
             print(f"    ⚠️ Article URL পাওয়া যায়নি"); return
 
         print(f"    🔗 {url}")
-        article = await scrape_article(page, url)
+        extra_wait = 8 if 'jugantor' in source.get('id', '') else 3
+        article = await scrape_article(page, url, extra_wait=extra_wait)
 
         if not article.get('title') or not article.get('content'):
             print(f"    ⚠️ শিরোনাম বা কন্টেন্ট পাওয়া যায়নি"); return
