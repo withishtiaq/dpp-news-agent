@@ -38,7 +38,7 @@ SOURCES = [
         'id':   'jagonews24',
         'name': 'জাগো নিউজ ২৪',
         'url':  'https://www.jagonews24.com/bangladesh/rajshahi/rajshahi',
-        'skip': ['/bangladesh/rajshahi/rajshahi'],
+        'skip': [],
     },
     {
         'id':   'ajkerpatrika',
@@ -261,6 +261,13 @@ async def process_source(browser, source: dict, layout: str):
 
         if not article.get('title') or not article.get('content'):
             print(f"    ⚠️ শিরোনাম বা কন্টেন্ট পাওয়া যায়নি"); return
+
+        # আজকের পত্রিকা: রাজশাহী সংক্রান্ত কিনা চেক করো
+        if source['id'] == 'ajkerpatrika':
+            combined = article['title'] + article['content'][:300]
+            if 'রাজশাহী' not in combined:
+                print(f"    ⚠️ রাজশাহী সংক্রান্ত নয় — skip: {article['title'][:50]}")
+                return
 
         print(f"    📝 {article['title'][:65]}")
         print(f"    📊 {len(article['content'])} অক্ষর | 🖼️ {'✓' if article['image_url'] else '✗'}")
