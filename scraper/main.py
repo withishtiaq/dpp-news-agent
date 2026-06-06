@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-DPP নিউজ এজেন্ট — v5
-GitHub Actions-এ চলে, articles.json-এ সেভ করে।
-WordPress পরে GitHub থেকে পড়ে পোস্ট করে।
+DPP নিউজ এজেন্ট — v6 (Simplified)
+৪টা সাইট থেকে রাজশাহীর আপডেটেড নিউজ সংগ্রহ করে।
 """
 
 import asyncio
@@ -16,69 +15,64 @@ from urllib.parse import urlparse
 from playwright.async_api import async_playwright, TimeoutError as PWTimeout
 
 BD_TZ    = timezone(timedelta(hours=6))
-ARTICLES = []   # collected articles
+ARTICLES = []
 
 def get_layout() -> str:
     layouts = ['layout1', 'layout2', 'layout3', 'layout4', 'layout5', 'layout6']
     return layouts[datetime.now(BD_TZ).hour % 6]
 
-# ─── Sources ────────────────────────────────────────────────
 SOURCES = [
-    {'id': 'prothomalo',        'name': 'প্রথম আলো',        'upazila': '',
-     'url': 'https://www.prothomalo.com/search?type=text%2Cteam-bio%2Clisticle%2Cphoto%2Cgallery%2Cvideo%2Clive-blog%2Cinterview&q=%E0%A6%B0%E0%A6%BE%E0%A6%9C%E0%A6%B6%E0%A6%BE%E0%A6%B9%E0%A7%80',
-     'extra_skip': ['/photo/', '/video/', '/gallery/', '/international/', '/lifestyle/', '/entertainment/', '/sports/', '/feature/', '/opinion/', '/world/', '/technology/', '/science/']},
-
-    {'id': 'jugantor_bagha',    'name': 'যুগান্তর — বাঘা',    'upazila': 'বাঘা',
-     'url': 'https://www.jugantor.com/location/rajshahi-rajshahi-bagha',    'extra_skip': ['/location/']},
-    {'id': 'jugantor_bagmara',  'name': 'যুগান্তর — বাগমারা', 'upazila': 'বাগমারা',
-     'url': 'https://www.jugantor.com/location/rajshahi-rajshahi-bagmara',  'extra_skip': ['/location/']},
-    {'id': 'jugantor_charghat', 'name': 'যুগান্তর — চারঘাট',  'upazila': 'চারঘাট',
-     'url': 'https://www.jugantor.com/location/rajshahi-rajshahi-charghat', 'extra_skip': ['/location/']},
-    {'id': 'jugantor_durgapur', 'name': 'যুগান্তর — দুর্গাপুর','upazila': 'দুর্গাপুর',
-     'url': 'https://www.jugantor.com/location/rajshahi-rajshahi-durgapur', 'extra_skip': ['/location/']},
-    {'id': 'jugantor_godagari', 'name': 'যুগান্তর — গোদাগাড়ী','upazila': 'গোদাগাড়ী',
-     'url': 'https://www.jugantor.com/location/rajshahi-rajshahi-godagari', 'extra_skip': ['/location/']},
-    {'id': 'jugantor_mohanpur', 'name': 'যুগান্তর — মোহনপুর', 'upazila': 'মোহনপুর',
-     'url': 'https://www.jugantor.com/location/rajshahi-rajshahi-mohanpur', 'extra_skip': ['/location/']},
-    {'id': 'jugantor_paba',     'name': 'যুগান্তর — পবা',      'upazila': 'পবা',
-     'url': 'https://www.jugantor.com/location/rajshahi-rajshahi-paba',     'extra_skip': ['/location/']},
-    {'id': 'jugantor_puthia',   'name': 'যুগান্তর — পুঠিয়া',  'upazila': 'পুঠিয়া',
-     'url': 'https://www.jugantor.com/location/rajshahi-rajshahi-puthia',   'extra_skip': ['/location/']},
-    {'id': 'jugantor_tanore',   'name': 'যুগান্তর — তানোর',    'upazila': 'তানোর',
-     'url': 'https://www.jugantor.com/location/rajshahi-rajshahi-tanore',   'extra_skip': ['/location/']},
-
-    {'id': 'jagonews24',     'name': 'জাগো নিউজ ২৪',   'upazila': '',
-     'url': 'https://www.jagonews24.com/bangladesh/rajshahi/rajshahi',    'extra_skip': ['/bangladesh/rajshahi/rajshahi']},
-    {'id': 'ajkerpatrika',   'name': 'আজকের পত্রিকা',  'upazila': '',
-     'url': 'https://www.ajkerpatrika.com/country/rajshahi-division',     'extra_skip': ['/country/', '/division', '/international/', '/world/']},
-    {'id': 'padmatimes24',   'name': 'পদ্মা টাইমস ২৪', 'upazila': '',
-     'url': 'https://padmatimes24.com/rajshahi/',                         'extra_skip': ['/category/']},
-    {'id': 'uttaraprotidin', 'name': 'উত্তরা প্রতিদিন','upazila': '',
-     'url': 'https://www.uttaraprotidin.com/category/uttranchl',          'extra_skip': ['/category/']},
+    {
+        'id':   'uttaraprotidin',
+        'name': 'উত্তরা প্রতিদিন',
+        'url':  'https://www.uttaraprotidin.com/category/uttranchl',
+        'skip': ['/category/'],
+    },
+    {
+        'id':   'jugantor',
+        'name': 'যুগান্তর',
+        'url':  'https://www.jugantor.com/location/rajshahi-rajshahi',
+        'skip': ['/location/'],
+    },
+    {
+        'id':   'jagonews24',
+        'name': 'জাগো নিউজ ২৪',
+        'url':  'https://www.jagonews24.com/bangladesh/rajshahi/rajshahi',
+        'skip': ['/bangladesh/rajshahi/rajshahi'],
+    },
+    {
+        'id':   'ajkerpatrika',
+        'name': 'আজকের পত্রিকা',
+        'url':  'https://www.ajkerpatrika.com/country/rajshahi-division/rajshahi',
+        'skip': ['/country/', '/international/', '/world/', '/business/', '/sports/', '/entertainment/'],
+    },
 ]
 
 CONTENT_SELECTORS = [
-    # Jugantor specific
     'div.col-xl-8 div.details p',
     'div.col-xl-8 p',
     'div[class*="news_dtl_body"] p',
     'div[class*="news_dtl"] p',
     'div[class*="dtls_body"] p',
-    'div[class*="dtl_body"] p',
     '.details p',
-    'div[class*="news_dtl"] p', 'div.details p',
-    'div[class*="story-element-text"] p', 'div[class*="story-content"] p',
-    'div[class*="news-details"] p', 'div[class*="details_body"] p',
-    'div[class*="content-wrapper"] p', 'div[class*="article-content"] p',
-    'div.entry-content p', 'div[class*="post-content"] p',
-    'div[class*="single-post-content"] p',
-    'article p', 'div[class*="news_content"] p', 'div[class*="news-content"] p',
-    'div[class*="body-text"] p', 'div[class*="article-body"] p', 'main p',
+    'div.entry-content p',
+    'div[class*="post-content"] p',
+    'div[class*="single-post"] p',
+    'div[class*="news-details"] p',
+    'div[class*="details_body"] p',
+    'div[class*="dtl_body"] p',
+    'div[class*="article-content"] p',
+    'div[class*="content-wrapper"] p',
+    'article p',
+    'div[class*="news_content"] p',
+    'div[class*="body-text"] p',
+    'main p',
+    'p',
 ]
 
 async def dismiss_popups(page):
     for sel in ['button[class*="close"]', '[class*="popup"] button',
-                '[class*="modal"] button[class*="close"]']:
+                '[class*="modal"] button[class*="close"]', '[class*="cookie"] button']:
         try:
             btn = page.locator(sel).first
             if await btn.is_visible(timeout=500):
@@ -89,28 +83,26 @@ async def dismiss_popups(page):
 
 async def get_latest_article_url(page, source: dict) -> str | None:
     list_url    = source['url']
-    extra_skip  = source.get('extra_skip', [])
+    skip        = source.get('skip', [])
     site_domain = urlparse(list_url).netloc.replace('www.', '')
 
     try:
         await page.goto(list_url, timeout=45000, wait_until='domcontentloaded')
-        # নেটওয়ার্ক idle হওয়ার জন্য অপেক্ষা করো (AJAX content)
         try:
             await page.wait_for_load_state('networkidle', timeout=8000)
         except Exception:
             pass
-        await asyncio.sleep(2)
+        await asyncio.sleep(3)
         await dismiss_popups(page)
-        # Scroll করো — lazy load trigger করতে
         await page.evaluate("window.scrollTo(0, 600)")
         await asyncio.sleep(1)
         await page.evaluate("window.scrollTo(0, 1200)")
         await asyncio.sleep(1)
     except PWTimeout:
-        print(f"    ⚠️ Timeout")
+        print(f"    ⚠️ Page load timeout")
         return None
     except Exception as e:
-        print(f"    ⚠️ Error: {e}")
+        print(f"    ⚠️ Page load error: {e}")
         return None
 
     def is_valid(link):
@@ -120,12 +112,11 @@ async def get_latest_article_url(page, source: dict) -> str | None:
         path  = urlparse(link).path.rstrip('/')
         parts = [p for p in path.split('/') if p]
         if len(parts) < 2: return False
-        if extra_skip and any(p in link.lower() for p in extra_skip): return False
         for bad in ['/tag/', '/author/', '/page/', '/feed/', '/wp-admin/', '/search/']:
             if bad in link.lower(): return False
+        if skip and any(s in link.lower() for s in skip): return False
         return True
 
-    # সব link বের করো
     try:
         all_links = await page.eval_on_selector_all(
             'a[href]',
@@ -134,7 +125,7 @@ async def get_latest_article_url(page, source: dict) -> str | None:
     except Exception:
         return None
 
-    # Strategy 1: Bengali char ≥15 (article title)
+    # Strategy 1: Bengali title
     try:
         links_bn = await page.eval_on_selector_all(
             'a[href]',
@@ -146,31 +137,24 @@ async def get_latest_article_url(page, source: dict) -> str | None:
         for item in links_bn:
             link = item.get('href', '')
             if is_valid(link):
-                print(f"    📌 Strategy 1 (Bengali)")
+                print(f"    📌 Strategy 1 (Bengali title)")
                 return link
     except Exception:
         pass
 
-    # Strategy 1.5: Jugantor-specific — সরাসরি article section URL খোঁজো
-    if 'jugantor' in source.get('id', ''):
-        jugantor_sections = ['/politics/', '/tp-city/', '/national-others/', '/district/',
-                             '/crime/', '/court/', '/country/', '/economy/', '/campus/',
-                             '/agriculture/', '/health/', '/science/', '/sports/']
+    # Strategy 1.5: Jugantor article sections
+    if source['id'] == 'jugantor':
+        jugantor_secs = ['/politics/', '/tp-city/', '/national-others/', '/district/',
+                         '/crime/', '/court/', '/economy/', '/campus/', '/agriculture/']
         for link in all_links:
-            if not link or not link.startswith('http'): continue
-            if 'jugantor.com' not in link: continue
-            if link.rstrip('/') == list_url.rstrip('/'): continue
+            if not is_valid(link): continue
             if '/location/' in link: continue
-            path  = urlparse(link).path
-            parts = [p for p in path.rstrip('/').split('/') if p]
-            if len(parts) < 2: continue
-            # Section + Numeric ID pattern
-            last = parts[-1]
-            if re.search(r'\d{4,}', last) and any(s in link for s in jugantor_sections):
-                print(f"    📌 Strategy 1.5 (Jugantor article)")
+            last = urlparse(link).path.rstrip('/').split('/')[-1]
+            if re.search(r'\d{4,}', last) and any(s in link for s in jugantor_secs):
+                print(f"    📌 Strategy 1.5 (Jugantor section)")
                 return link
 
-    # Strategy 2: Numeric ID (jugantor style: /section/123456)
+    # Strategy 2: Numeric ID
     for link in all_links:
         if not is_valid(link): continue
         last = urlparse(link).path.rstrip('/').split('/')[-1]
@@ -178,7 +162,7 @@ async def get_latest_article_url(page, source: dict) -> str | None:
             print(f"    📌 Strategy 2 (Numeric ID)")
             return link
 
-    # Strategy 3: Long slug (≥20 chars)
+    # Strategy 3: Long slug
     for link in all_links:
         if not is_valid(link): continue
         last = urlparse(link).path.rstrip('/').split('/')[-1]
@@ -188,18 +172,22 @@ async def get_latest_article_url(page, source: dict) -> str | None:
 
     return None
 
-async def scrape_article(page, url: str, extra_wait: int = 3) -> dict:
+async def scrape_article(page, url: str, source_id: str = '') -> dict:
+    wait_time = 8 if source_id == 'jugantor' else 4
+
     try:
         await page.goto(url, timeout=45000, wait_until='domcontentloaded')
         try:
             await page.wait_for_load_state('networkidle', timeout=8000)
         except Exception:
             pass
-        await asyncio.sleep(extra_wait)
+        await asyncio.sleep(wait_time)
         await dismiss_popups(page)
     except PWTimeout:
+        print(f"    ⚠️ Article timeout")
         return {}
-    except Exception:
+    except Exception as e:
+        print(f"    ⚠️ Article error: {e}")
         return {}
 
     title = ''
@@ -214,7 +202,7 @@ async def scrape_article(page, url: str, extra_wait: int = 3) -> dict:
         try: title = (await page.inner_text('h1', timeout=3000)).strip()
         except Exception: pass
     if not title:
-        try: title = re.sub(r'\s*[\|\-–—]\s*.{0,40}$', '', await page.title()).strip()
+        try: title = re.sub(r'\s*[\|\-\u2013\u2014]\s*.{0,40}$', '', await page.title()).strip()
         except Exception: pass
 
     image_url = ''
@@ -233,16 +221,27 @@ async def scrape_article(page, url: str, extra_wait: int = 3) -> dict:
                 sel, "els => els.map(e => e.innerText.trim()).filter(t => t.length > 25)"
             )
             if paras:
-                joined = '\n\n'.join(paras)
-                if len(joined) >= 150:
-                    content = joined[:5000]; break
+                bn_paras = [p for p in paras if len([c for c in p if '\u0980' <= c <= '\u09FF']) >= 10]
+                if bn_paras:
+                    joined = '\n\n'.join(bn_paras)
+                    if len(joined) >= 100:
+                        content = joined[:5000]; break
         except Exception:
             continue
+
+    if not content:
+        try:
+            desc = await page.get_attribute('meta[property="og:description"]', 'content', timeout=2000)
+            if desc and len(desc.strip()) > 50:
+                content = desc.strip()
+        except Exception:
+            pass
 
     return {'title': title, 'content': content, 'image_url': image_url, 'url': url}
 
 async def process_source(browser, source: dict, layout: str):
-    print(f"\n📰 {source['name']}")
+    print(f"\n{'─'*55}")
+    print(f"📰 {source['name']}  →  {source['url']}")
 
     context = await browser.new_context(
         user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -253,23 +252,15 @@ async def process_source(browser, source: dict, layout: str):
     page = await context.new_page()
 
     try:
-        url = await get_latest_article_url(page, source)
-        if not url:
+        article_url = await get_latest_article_url(page, source)
+        if not article_url:
             print(f"    ⚠️ Article URL পাওয়া যায়নি"); return
 
-        print(f"    🔗 {url}")
-        extra_wait = 8 if 'jugantor' in source.get('id', '') else 3
-        article = await scrape_article(page, url, extra_wait=extra_wait)
+        print(f"    🔗 {article_url}")
+        article = await scrape_article(page, article_url, source['id'])
 
         if not article.get('title') or not article.get('content'):
             print(f"    ⚠️ শিরোনাম বা কন্টেন্ট পাওয়া যায়নি"); return
-
-        # Prothom Alo-র জন্য: রাজশাহী সংক্রান্ত কিনা check করো
-        if source['id'] == 'prothomalo':
-            rajshahi_check = 'রাজশাহী' in article['title'] or 'rajshahi' in article['url'].lower() or 'রাজশাহী' in article['content'][:500]
-            if not rajshahi_check:
-                print(f"    ⚠️ রাজশাহী সংক্রান্ত নয় — skip: {article['title'][:50]}")
-                return
 
         print(f"    📝 {article['title'][:65]}")
         print(f"    📊 {len(article['content'])} অক্ষর | 🖼️ {'✓' if article['image_url'] else '✗'}")
@@ -279,7 +270,7 @@ async def process_source(browser, source: dict, layout: str):
             'content':    article['content'],
             'image_url':  article['image_url'],
             'source_url': article['url'],
-            'upazila':    source.get('upazila', ''),
+            'upazila':    '',
         })
         print(f"    ✅ সংগ্রহ হয়েছে!")
 
@@ -292,10 +283,10 @@ async def main():
     layout  = get_layout()
     bd_time = datetime.now(BD_TZ).strftime('%Y-%m-%d %H:%M')
 
-    print(f"{'='*60}")
-    print(f"🤖 DPP নিউজ এজেন্ট v5 — {bd_time} (BD)")
+    print(f"{'='*55}")
+    print(f"🤖 DPP নিউজ এজেন্ট v6 — {bd_time} (BD)")
     print(f"🗞️  লেআউট: {layout} | সোর্স: {len(SOURCES)}")
-    print(f"{'='*60}")
+    print(f"{'='*55}")
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(
@@ -306,12 +297,11 @@ async def main():
         for source in SOURCES:
             try:
                 await process_source(browser, source, layout)
-                await asyncio.sleep(2)
+                await asyncio.sleep(3)
             except Exception as e:
                 print(f"\n❌ {source['name']}: {e}")
         await browser.close()
 
-    # data/articles.json-এ সেভ করো
     os.makedirs('data', exist_ok=True)
     output = {
         'generated_at': datetime.now(BD_TZ).isoformat(),
@@ -321,10 +311,10 @@ async def main():
     with open('data/articles.json', 'w', encoding='utf-8') as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'='*55}")
     print(f"💾 {len(ARTICLES)} আর্টিকেল → data/articles.json")
-    print(f"✅ শেষ। WordPress এখন GitHub থেকে পড়বে।")
-    print(f"{'='*60}")
+    print(f"✅ শেষ। WordPress GitHub থেকে পড়বে।")
+    print(f"{'='*55}")
 
 if __name__ == '__main__':
     asyncio.run(main())
