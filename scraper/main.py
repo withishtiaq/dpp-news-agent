@@ -44,7 +44,7 @@ SOURCES = [
         'id':   'ajkerpatrika',
         'name': 'আজকের পত্রিকা',
         'url':  'https://www.ajkerpatrika.com/country/rajshahi-division/rajshahi',
-        'skip': ['/country/', '/international/', '/world/', '/business/', '/sports/', '/entertainment/'],
+        'skip': ['/country/', '/international/', '/world/', '/business/', '/sports/', '/entertainment/', '/topic/'],
     },
 ]
 
@@ -117,13 +117,9 @@ async def get_latest_article_url(page, source: dict) -> str | None:
         if skip and any(s in link.lower() for s in skip): return False
         return True
 
-    # jagonews24-র জন্য article load হওয়ার জন্য অপেক্ষা করো
+    # jagonews24-র জন্য বেশি সময় দাও
     if source.get('id') == 'jagonews24':
-        try:
-            await page.wait_for_selector('h2 a, h3 a, .news-title a, article a', timeout=10000)
-        except Exception:
-            pass
-        await asyncio.sleep(3)
+        await asyncio.sleep(5)
 
     try:
         all_links = await page.eval_on_selector_all(
@@ -256,8 +252,13 @@ async def process_source(browser, source: dict, layout: str):
         user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         locale='bn-BD',
         viewport={'width': 1366, 'height': 768},
-        extra_http_headers={'Accept-Language': 'bn-BD,bn;q=0.9,en-US;q=0.8'},
+        extra_http_headers={
+            'Accept-Language': 'bn-BD,bn;q=0.9,en-US;q=0.8',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        },
     )
+    # Headless browser detect এড়াতে
+    await context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     page = await context.new_page()
 
     try:
@@ -311,8 +312,11 @@ async def main():
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=True,
-            args=['--no-sandbox','--disable-setuid-sandbox',
-                  '--disable-dev-shm-usage','--disable-gpu'],
+            args=[
+                '--no-sandbox', '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage', '--disable-gpu',
+                '--disable-blink-features=AutomationControlled',
+            ],
         )
         for source in SOURCES:
             try:
