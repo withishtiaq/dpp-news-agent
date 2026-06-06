@@ -1,0 +1,41 @@
+name: 🤖 DPP নিউজ এজেন্ট
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  news-agent:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🐍 Python সেটআপ
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 📦 Dependencies ইন্সটল
+        run: |
+          pip install -r scraper/requirements.txt
+          playwright install chromium --with-deps
+
+      - name: 🤖 নিউজ স্ক্র্যাপ করো
+        run: python scraper/main.py
+
+      - name: 📤 GitHub-এ আপলোড করো
+        run: |
+          git config user.email "dpp-agent@github.com"
+          git config user.name "DPP Agent"
+          git add data/articles.json
+          git diff --staged --quiet || git commit -m "📰 $(TZ='Asia/Dhaka' date +'%Y-%m-%d %H:%M')"
+          git push
