@@ -50,7 +50,10 @@ def strip_html(html: str) -> str:
     text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL)
     text = re.sub(r'<[^>]+>', ' ', text)
     text = re.sub(r'&nbsp;|&amp;|&lt;|&gt;|&quot;|&#\d+;', ' ', text)
-    return re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r'\s+', ' ', text).strip()
+    # "The post … appeared first on …" ফুটার সরাও
+    text = re.sub(r'The post\s+.+?\s+appeared first on\s+.+?\.?\s*$', '', text, flags=re.DOTALL).strip()
+    return text
 
 def make_session():
     if HAS_CLOUDSCRAPER:
