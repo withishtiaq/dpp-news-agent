@@ -2,6 +2,7 @@
 """
 DPP নিউজ এজেন্ট — Cloudscraper version
 Cloudflare bypass করে পদ্মা টাইমস ২৪ থেকে RSS Feed নেয়।
+RSS-এ ছবি না পেলে আর্টিকেলের পেজ থেকে og:image নেয়।
 """
 
 import json
@@ -78,7 +79,56 @@ def fetch_rss(session, url: str):
         print(f"  ❌ {url}: {e}")
     return None
 
-def parse_rss(content: bytes) -> list:
+def fetch_og_image(session, url: str) -> str:
+    """
+    আর্টিকেলের পেজ থেকে og:image মেটা ট্যাগ পড়ে ফিচার ইমেজ বের করে।
+    RSS-এ ছবি না থাকলে এটা fallback হিসেবে কাজ করে।
+    """
+    if not url:
+        return ''
+    try:
+        r = session.get(url, timeout=20)
+        if r.status_code != 200:
+            return ''
+        html = r.text
+
+        # og:image মেটা ট্যাগ
+        m = re.search(
+            r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
+            html, re.IGNORECASE
+        )
+        if m:
+            return m.group(1).strip()
+
+        # content আগে, property পরে (উল্টো অর্ডার)
+        m = re.search(
+            r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
+            html, re.IGNORECASE
+        )
+        if m:
+            return m.group(1).strip()
+
+        # twitter:image fallback
+        m = re.search(
+            r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)["\']',
+            html, re.IGNORECASE
+        )
+        if m:
+            return m.group(1).strip()
+
+        # পেজের প্রথম বড় <img> ট্যাগ (wp-content/uploads ছবি)
+        m = re.search(
+            r'<img[^>]+src=["\']([^"\']*wp-content/uploads[^"\']+)["\']',
+            html, re.IGNORECASE
+        )
+        if m:
+            return m.group(1).strip()
+
+    except Exception as e:
+        print(f"  ⚠️ og:image fetch ব্যর্থ ({url[:50]}...): {e}")
+    return ''
+
+def parse_rss(content: bytes, session) -> list:
     # BOM এবং leading content পরিষ্কার করো
     text = content.decode('utf-8', errors='replace')
     text = text.lstrip('\ufeff')  # UTF-8 BOM সরাও
@@ -134,19 +184,41 @@ def parse_rss(content: bytes) -> list:
         if len(content) < 30:
             continue
 
-        # Image
+        # ---- ছবি খোঁজা: ৪ ধাপে ----
+
         image_url = ''
+
+        # ধাপ ১: enclosure ট্যাগ
         enc = item.find('enclosure')
         if enc is not None:
             image_url = enc.get('url', '')
+
+        # ধাপ ২: media:content ট্যাগ
         if not image_url:
             med = item.find('media:content', ns)
             if med is not None:
                 image_url = med.get('url', '')
+
+        # ধাপ ৩: media:thumbnail ট্যাগ
+        if not image_url:
+            thumb = item.find('media:thumbnail', ns)
+            if thumb is not None:
+                image_url = thumb.get('url', '')
+
+        # ধাপ ৪: content:encoded-এর <img> ট্যাগ
         if not image_url and ce is not None and ce.text:
             m = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', ce.text)
             if m:
                 image_url = m.group(1)
+
+        # ধাপ ৫ (fallback): আর্টিকেলের পেজ থেকে og:image
+        if not image_url and link:
+            print(f"  🔍 og:image খুঁজছি: {link[:60]}")
+            image_url = fetch_og_image(session, link)
+            if image_url:
+                print(f"  🖼️ og:image পাওয়া গেছে: {image_url[:60]}")
+            else:
+                print(f"  ⚠️ কোনো ছবি পাওয়া যায়নি")
 
         articles.append({
             'title':      title,
@@ -177,7 +249,7 @@ def main():
         if content:
             # XML কিনা check করো
             if b'<rss' in content[:500] or b'<feed' in content[:500]:
-                articles = parse_rss(content)
+                articles = parse_rss(content, session)
                 if articles:
                     break
             else:
@@ -193,8 +265,13 @@ def main():
     with open('data/articles.json', 'w', encoding='utf-8') as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
 
+    # ছবির পরিসংখ্যান
+    with_img    = sum(1 for a in articles if a.get('image_url'))
+    without_img = len(articles) - with_img
+
     print(f"\n{'='*55}")
     print(f"💾 {len(articles)} আর্টিকেল → data/articles.json")
+    print(f"🖼️  ছবি পেয়েছি: {with_img} | ছবি নেই: {without_img}")
     print(f"✅ শেষ।")
     print(f"{'='*55}")
 
